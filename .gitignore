@@ -5,6 +5,7 @@ lightning_logs/
 
 ckpt/
 data/
+!data/synergy/
 output/
 outputs/
 tmp/
