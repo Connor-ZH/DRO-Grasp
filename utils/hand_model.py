@@ -54,6 +54,7 @@ class HandModel:
         for link_name, link_mesh in self.meshes.items():
             if link_name in removed_links:  # remove links unrelated to contact
                 continue
+            # print("link_num_points: ", link_num_points)
             v = link_mesh.sample(link_num_points)
             self.vertices[link_name] = v
 

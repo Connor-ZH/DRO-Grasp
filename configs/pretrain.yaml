@@ -11,11 +11,11 @@ gpu:
   - 0
   - 1
   - 2
-  - 3
-  - 4
-  - 5
-  - 6
-  - 7
+#  - 3
+#  - 4
+#  - 5
+#  - 6
+#  - 7
 
 load_from_checkpoint: False
 log_every_n_steps: 5
@@ -36,4 +36,3 @@ training:
   lr: 1e-4
   temperature: 0.1
 
-dataset_type: "SYNERGY"
