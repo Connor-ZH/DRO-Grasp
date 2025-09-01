@@ -10,6 +10,6 @@ outputs/
 tmp/
 validate_output/
 vis_info/
-issacgym/
+isaacgym/
 
 *.pt
