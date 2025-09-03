@@ -11,8 +11,73 @@ sys.path.append(ROOT_DIR)
 
 from utils.se3_transform import compute_link_pose
 from utils.multilateration import multilateration
-from utils.func_utils import calculate_depth
+from utils.func_utils import calculate_depth, preload_object_pcs_from_folder, calculate_depth_new
 from utils.pretrain_utils import dist2weight, infonce_loss, mean_order
+
+def stack_transforms_with_mask(transforms_list, all_link_names=None, device=None):
+    """
+    Convert list-of-dicts transforms into [B, L, 4, 4] tensor + mask.
+    Pads missing links with identity.
+    """
+    if all_link_names is None:
+        all_link_names = sorted({ln for t in transforms_list for ln in t.keys()})
+    B = len(transforms_list)
+    L = len(all_link_names)
+
+    if device is None:
+        device = next(iter(transforms_list[0].values())).device
+
+    stacked = torch.zeros(B, L, 4, 4, device=device)
+    mask = torch.zeros(B, L, dtype=torch.bool, device=device)
+
+    for b in range(B):
+        for i, ln in enumerate(all_link_names):
+            if ln in transforms_list[b]:
+                stacked[b, i] = transforms_list[b][ln]
+                mask[b, i] = True
+            else:
+                stacked[b, i] = torch.eye(4, device=device)
+                mask[b, i] = False
+
+    return stacked, mask, all_link_names
+
+
+def se3_loss_vec(transforms_list, transforms_gt_list):
+    # Build union of all keys across both sets
+    all_link_names = sorted({ln for t in transforms_list for ln in t.keys()} |
+                            {ln for t in transforms_gt_list for ln in t.keys()})
+
+    # Stack both with the same link order
+    T, mask, _ = stack_transforms_with_mask(transforms_list, all_link_names)
+    T_gt, mask_gt, _ = stack_transforms_with_mask(transforms_gt_list, all_link_names, device=T.device)
+
+    valid_mask = mask & mask_gt  # [B, L]
+
+    R = T[:, :, :3, :3]
+    t = T[:, :, :3, 3]
+    R_gt = T_gt[:, :, :3, :3]
+    t_gt = T_gt[:, :, :3, 3]
+
+    # relative rotation
+    rel_R = torch.matmul(R.transpose(-1, -2), R_gt)
+    rel_trace = torch.diagonal(rel_R, dim1=-2, dim2=-1).sum(-1)
+    cos_theta = torch.clamp((rel_trace - 1) / 2, -1.0, 1.0)
+    rel_angle = torch.acos(cos_theta)
+
+    # relative translation
+    rel_translation = torch.norm(t - t_gt, dim=-1)
+
+    # per-link loss
+    per_link_loss = rel_translation + rel_angle  # [B, L]
+
+    # --- match loop: average per sample, then over batch ---
+    per_link_loss = per_link_loss * valid_mask    # zero out invalid
+    valid_counts = valid_mask.sum(dim=1)          # [B]
+    per_sample_loss = per_link_loss.sum(dim=1) / valid_counts.clamp(min=1)
+    loss = per_sample_loss.mean()
+
+    return loss
+
 
 
 class TrainingModule(pl.LightningModule):
@@ -22,9 +87,15 @@ class TrainingModule(pl.LightningModule):
         self.network = network
         self.epoch_idx = epoch_idx
 
+        self.cache = None
         self.lr = cfg.lr
 
         os.makedirs(self.cfg.save_dir, exist_ok=True)
+    
+
+    def setup(self, stage=None):
+        if self.cache is None:  # preload only once
+            self.cache = preload_object_pcs_from_folder(self.device)
 
     def ddp_print(self, *args, **kwargs):
         if self.global_rank == 0:
@@ -49,6 +120,10 @@ class TrainingModule(pl.LightningModule):
         logvar = network_output['logvar']
 
         mlat_pc = multilateration(dro, object_pc)
+        # mlat_pc_new = multilateration_fast(dro, object_pc)
+        # print("allclose:", torch.allclose(mlat_pc, mlat_pc_new, atol=1e-6))
+        # print("max abs diff:", (mlat_pc - mlat_pc_new).abs().max().item())
+
         transforms, transformed_pc = compute_link_pose(robot_links_pc, mlat_pc)
 
         loss = 0.
@@ -68,24 +143,42 @@ class TrainingModule(pl.LightningModule):
 
         if self.cfg.loss_se3:
             transforms_gt, transformed_pc_gt = compute_link_pose(robot_links_pc, robot_pc_target)
+         
             loss_se3 = 0.
-            for idx in range(len(transforms)):  # iteration over batch
-                transform = transforms[idx]
-                transform_gt = transforms_gt[idx]
-                loss_se3_item = 0.
-                for link_name in transform:
-                    rel_translation = transform[link_name][:3, 3] - transform_gt[link_name][:3, 3]
-                    rel_rotation = transform[link_name][:3, :3].mT @ transform_gt[link_name][:3, :3]
-                    rel_rotation_trace = torch.clamp(torch.trace(rel_rotation), -1, 3)
-                    rel_angle = torch.acos((rel_rotation_trace - 1) / 2)
-                    loss_se3_item += torch.mean(torch.norm(rel_translation, dim=-1) + rel_angle)
-                loss_se3 += loss_se3_item / len(transform)
-            loss_se3 = loss_se3 / len(transforms) * self.cfg.loss_se3_weight
+            # for idx in range(len(transforms)):  # iteration over batch
+            #     transform = transforms[idx]
+            #     transform_gt = transforms_gt[idx]
+            #     loss_se3_item = 0.
+            #     for link_name in transform:
+            #         rel_translation = transform[link_name][:3, 3] - transform_gt[link_name][:3, 3]
+            #         rel_rotation = transform[link_name][:3, :3].mT @ transform_gt[link_name][:3, :3]
+            #         rel_rotation_trace = torch.clamp(torch.trace(rel_rotation), -1, 3)
+            #         rel_angle = torch.acos((rel_rotation_trace - 1) / 2)
+            #         loss_se3_item += torch.mean(torch.norm(rel_translation, dim=-1) + rel_angle)
+            #     loss_se3 += loss_se3_item / len(transform)
+            # loss_se3 = loss_se3 / len(transforms) * self.cfg.loss_se3_weight
+
+
+           
+            loss_se3 = se3_loss_vec(transforms, transforms_gt)
+            loss_se3 = loss_se3 * self.cfg.loss_se3_weight
+
             self.log('loss_se3', loss_se3, prog_bar=True)
+
+
+            # print("checking equivalence")
+            # assert torch.allclose(loss_se3, loss_se3_batch, atol=1e-6)
+
+
             loss += loss_se3
 
         if self.cfg.loss_depth:
-            loss_depth = calculate_depth(transformed_pc, object_name)
+            # loss_depth_old = calculate_depth(transformed_pc, object_name, self.cache)
+            loss_depth = calculate_depth_new(transformed_pc, object_name, self.cache)
+            # print("Equal:", torch.allclose(loss_depth, loss_depth_new, atol=1e-10))
+            # print("Diff:", (loss_depth - loss_depth_new).abs().item())
+
+
             loss_depth = loss_depth * self.cfg.loss_depth_weight
             self.log('loss_depth', loss_depth, prog_bar=True)
             loss += loss_depth

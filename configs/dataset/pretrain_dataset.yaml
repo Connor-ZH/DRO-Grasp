@@ -1,8 +1,8 @@
 robot_names:
   - 'barrett'
   - 'allegro'
-  - 'shadowhand'
+  - 'shadow'
 
-batch_size: 16
-num_workers: 16
+batch_size: 70
+num_workers: 32
 dataset_type: "SYNERGY"

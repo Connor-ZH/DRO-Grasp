@@ -78,7 +78,7 @@ if __name__ == '__main__':
     # for object pc generation
     parser.add_argument('--object_source_path', default='data/data_urdf/object', type=str)
     # for robot pc generation
-    parser.add_argument('--robot_name', default='barrett', type=str)
+    parser.add_argument('--robot_name', default='shadow', type=str)
     parser.add_argument('--dataset_type', default='Synergy', type=str)
 
     args = parser.parse_args()

@@ -8,12 +8,12 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR)
 
 from model.network import create_encoder_network
-from data_utils.CMapDataset import create_dataloader
+from data_utils.SynergyDataset import create_dataloader
 from utils.pretrain_utils import dist2weight, infonce_loss
 
 
 pretrain_ckpt = "pretrain_3robots"  # name of pretrain model
-robot_names = ['barrett', 'allegro', 'shadowhand']
+robot_names = ['barrett', 'allegro', 'shadow']
 verbose = False
 data_num = 200
 

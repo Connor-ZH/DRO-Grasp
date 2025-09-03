@@ -52,3 +52,78 @@ def multilateration(dro, fixed_pc):
     v_est_p = torch.vmap(torch.vmap(estimate_p, in_dims=(None, 0)))
     target_pc = v_est_p(fixed_pc.unsqueeze(-1), dro)[..., 0]
     return target_pc
+
+
+def estimate_p_batch(P, R, W=None):
+    """
+    P: (B, N, D, 1)
+    R: (B, N)
+    """
+    B, N, D, _ = P.shape
+
+    if W is None:
+        W = torch.ones(B, N, device=P.device)
+    W = W[..., None, None]  # (B, N, 1, 1)
+
+    Pt = P.transpose(-2, -1)                    # (B, N, 1, D)
+    PPt = P @ Pt                                # (B, N, D, D)
+    PtP = (Pt @ P).squeeze(-1).squeeze(-1)      # (B, N)
+    I = torch.eye(D, device=P.device).expand(B, N, D, D)
+    PtP_minus_r2 = (PtP - R**2)[..., None, None]  # (B, N, 1, 1)
+
+    a = (W * (PtP_minus_r2 * P)).mean(dim=1)          # (B, D, 1)
+    Bmat = (W * (-2 * PPt - PtP_minus_r2 * I)).mean(dim=1)  # (B, D, D)
+    c = (W * P).mean(dim=1)                           # (B, D, 1)
+    f = a + Bmat @ c + 2 * c @ c.transpose(-2, -1) @ c  # (B, D, 1)
+    H = -2 * PPt.mean(dim=1) + 2 * c @ c.transpose(-2, -1)  # (B, D, D)
+
+    q = torch.linalg.solve(-H, f)  # (B, D, 1)
+    p = q + c
+    return p
+
+
+def multilateration_new(dro, fixed_pc):
+    """
+    dro: (B, N, N)
+    fixed_pc: (B, N, 3)
+    """
+    B, N, D = fixed_pc.shape
+    P = fixed_pc.unsqueeze(-1)  # (B, N, D, 1)
+
+    # Each row of dro is the R vector for one point
+    # Reshape to (B*N, N)
+    R = dro.reshape(B * N, N)
+
+    # Expand P to match (B*N, N, D, 1)
+    P_expanded = P.unsqueeze(1).expand(B, N, N, D, 1).reshape(B * N, N, D, 1)
+
+    # Solve all at once
+    p = estimate_p_batch(P_expanded, R)  # (B*N, D, 1)
+
+    target_pc = p.view(B, N, D)  # (B, N, D)
+    return target_pc
+
+if __name__ == "__main__":
+    import time
+
+    B, N = 32, 512
+    dro = torch.rand(B, N, N, device="cuda")
+    fixed_pc = torch.rand(B, N, 3, device="cuda")
+
+    # Warmup
+    _ = multilateration(dro, fixed_pc)
+    _ = multilateration_new(dro, fixed_pc)
+
+    # Measure ref
+    start = time.time()
+    for _ in range(100):
+        _ = multilateration(dro, fixed_pc)
+    torch.cuda.synchronize()
+    print("Ref time:", (time.time() - start)/10)
+
+    # Measure fast
+    start = time.time()
+    for _ in range(100):
+        _ = multilateration_new(dro, fixed_pc)
+    torch.cuda.synchronize()
+    print("Fast time:", (time.time() - start)/10)

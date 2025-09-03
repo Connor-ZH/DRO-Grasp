@@ -221,7 +221,7 @@ def create_hand_model(
     robot_name,
     device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
     num_points=512,
-    dataset_type = "DRO",
+    dataset_type = "SYNERGY",
 ):
     if dataset_type == "DRO":
         json_path = os.path.join(ROOT_DIR, 'data/data_urdf/robot/urdf_assets_meta.json')

@@ -9,7 +9,7 @@ from tqdm import tqdm
 import torch
 
 from model.network import create_encoder_network
-from data_utils.CMapDataset import create_dataloader
+from data_utils.SynergyDataset import create_dataloader
 from utils.pretrain_utils import dist2weight, infonce_loss
 
 
@@ -34,7 +34,8 @@ def main(args):
                     'robot_names': [robot_name],
                     'debug_object_names': None,
                     'object_pc_type': 'random',
-                    'num_workers': 4
+                    'num_workers': 4,
+                    'dataset_type': "SYNERGY",
                 }),
                 is_train=True
             )
@@ -73,9 +74,9 @@ if __name__ == '__main__':
     parser.add_argument('--pretrain_ckpt', type=str, default='pretrain_3robots')
     parser.add_argument('--data_num', type=int, default=200)
     parser.add_argument('--epoch_list', type=lambda string: string.split(','),
-                        default=['10', '20', '30', '40', '50', '60', '70', '80', '90', '100'])
+                        default=['5','10', '20', '30', '40', '50', '60', '70', '80', '90', '100'])
     parser.add_argument('--robot_names', type=lambda string: string.split(','),
-                        default=['barrett', 'allegro', 'shadowhand'])
+                        default=['shadow', 'barrett', 'allegro'])
     parser.add_argument('--verbose', action='store_true')
     args = parser.parse_args()
     main(args)

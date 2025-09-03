@@ -10,7 +10,9 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR)
 
 from model.network import create_encoder_network
-from data_utils.CMapDataset import CMapDataset
+# from data_utils.CMapDataset import CMapDataset
+from data_utils.SynergyDataset import SynergyDataset
+
 from utils.pretrain_utils import dist2weight, infonce_loss
 from utils.hand_model import create_hand_model
 
@@ -18,7 +20,7 @@ from utils.hand_model import create_hand_model
 def main(robot_name):
     encoder = create_encoder_network(emb_dim=512, pretrain='pretrain_3robots.pth')
 
-    dataset = CMapDataset(
+    dataset = SynergyDataset(
         batch_size=1,
         robot_names=[robot_name],
         is_train=True,
@@ -102,7 +104,7 @@ def main(robot_name):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--robot_name', type=str, default='shadowhand')
+    parser.add_argument('--robot_name', type=str, default='shadow')
     args = parser.parse_args()
 
     main(args.robot_name)

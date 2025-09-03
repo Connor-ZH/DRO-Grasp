@@ -11,7 +11,7 @@ sys.path.append(ROOT_DIR)
 
 from model.network import create_network
 from data_utils.CMapDataset import create_dataloader
-from utils.multilateration import multilateration
+from utils.multilateration import multilateration, multilateration_fast
 from utils.se3_transform import compute_link_pose
 from utils.optimization import *
 from utils.hand_model import create_hand_model
