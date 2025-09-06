@@ -11,7 +11,7 @@ sys.path.append(ROOT_DIR)
 
 from model.network import create_network
 from data_utils.CMapDataset import create_dataloader
-from utils.multilateration import multilateration, multilateration_fast
+from utils.multilateration import multilateration
 from utils.se3_transform import compute_link_pose
 from utils.optimization import *
 from utils.hand_model import create_hand_model
@@ -20,6 +20,8 @@ from validation.validate_utils import validate_isaac
 
 @hydra.main(version_base="1.2", config_path="configs", config_name="validate")
 def main(cfg):
+
+    print("cfg.model.encoder.pretrain: ", cfg.model.encoder.pretrain)
     device = torch.device(f'cuda:{cfg.gpu}')
     batch_size = cfg.dataset.batch_size
     print(f"Device: {device}")

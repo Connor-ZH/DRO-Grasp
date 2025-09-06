@@ -59,7 +59,7 @@ class SynergyDataset(Dataset):
             self.combination = []
             for robot_name in self.robot_names:
                 dataset = self.datasets[robot_name]
-                object_names = dataset.pcl_dict.keys()
+                object_names = set(dataset["grasp_code"])
                 for object_name in object_names:
                     self.combination.append((robot_name, object_name))
             self.combination = sorted(self.combination)

@@ -11,6 +11,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR)
 
 from model.network import create_network
+from collections import defaultdict
 # from data_utils.CMapDataset import create_dataloader
 from data_utils.SynergyDataset import create_dataloader
 
@@ -25,6 +26,7 @@ gpu = 2
 device = torch.device(f'cuda:{gpu}')
 ckpt_name = 'model_3robots'  # 'model_3robots_partial', 'model_allegro', 'model_barrett', 'model_shadowhand'
 batch_size = 50
+output_path = "/home/heng/DRO-Grasp/output/experiment"
 
 
 def main():
@@ -57,29 +59,31 @@ def main():
     time_list = []
     success_num = 0
     total_num = 0
+    results = defaultdict(lambda: defaultdict(lambda: {"predict_q": [], "time": []}))
+
     for i, data in enumerate(dataloader):
         robot_name = data['robot_name']
         object_name = data['object_name']
         print(robot_name, object_name)
 
         if robot_name != global_robot_name:
-            if global_robot_name is not None:
-                all_success_q = torch.cat(all_success_q, dim=0)
-                diversity_std = torch.std(all_success_q, dim=0).mean()
-                times = np.array(time_list)
-                time_mean = np.mean(times)
-                time_std = np.std(times)
-
-                success_rate = success_num / total_num * 100
-                cprint(f"[{global_robot_name}]", 'magenta', end=' ')
-                cprint(f"Result: {success_num}/{total_num}({success_rate:.2f}%)", 'yellow', end=' ')
-                cprint(f"Std: {diversity_std:.3f}", 'cyan', end=' ')
-                cprint(f"Time: (mean) {time_mean:.2f} s, (std) {time_std:.2f} s", 'blue')
-
-                all_success_q = []
-                time_list = []
-                success_num = 0
-                total_num = 0
+            # if global_robot_name is not None:
+            #     all_success_q = torch.cat(all_success_q, dim=0)
+            #     diversity_std = torch.std(all_success_q, dim=0).mean()
+            #     times = np.array(time_list)
+            #     time_mean = np.mean(times)
+            #     time_std = np.std(times)
+            #
+            #     success_rate = success_num / total_num * 100
+            #     cprint(f"[{global_robot_name}]", 'magenta', end=' ')
+            #     cprint(f"Result: {success_num}/{total_num}({success_rate:.2f}%)", 'yellow', end=' ')
+            #     cprint(f"Std: {diversity_std:.3f}", 'cyan', end=' ')
+            #     cprint(f"Time: (mean) {time_mean:.2f} s, (std) {time_std:.2f} s", 'blue')
+            #
+            #     all_success_q = []
+            #     time_list = []
+            #     success_num = 0
+            #     total_num = 0
             hand = create_hand_model(robot_name, device)
             global_robot_name = robot_name
 
@@ -105,8 +109,16 @@ def main():
 
             predict_q_list.append(predict_q)
 
+
+
         predict_q_batch = torch.cat(predict_q_list, dim=0)
         print("predict_q_batch.shape: ", predict_q_batch.shape)
+        results[robot_name][object_name]["predict_q"].append(predict_q_batch.cpu())
+        results[robot_name][object_name]["time"].extend(time_list)
+
+    # ✅ After loop, you can save results to disk
+    torch.save(results, f"{output_path}/predict_q_results_{ckpt_name}.pt")
+    print(f"Saved results to {output_path}/predict_q_results_{ckpt_name}.pt")
 
 
     #
