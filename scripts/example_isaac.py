@@ -11,7 +11,9 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR)
 
 from model.network import create_network
-from data_utils.CMapDataset import create_dataloader
+# from data_utils.CMapDataset import create_dataloader
+from data_utils.SynergyDataset import create_dataloader
+
 from utils.multilateration import multilateration
 from utils.se3_transform import compute_link_pose
 from utils.optimization import *
@@ -19,10 +21,10 @@ from utils.hand_model import create_hand_model
 from validation.validate_utils import validate_isaac
 
 
-gpu = 0
+gpu = 2
 device = torch.device(f'cuda:{gpu}')
 ckpt_name = 'model_3robots'  # 'model_3robots_partial', 'model_allegro', 'model_barrett', 'model_shadowhand'
-batch_size = 10
+batch_size = 50
 
 
 def main():
@@ -41,7 +43,7 @@ def main():
     dataloader = create_dataloader(
         SimpleNamespace(**{
             'batch_size': batch_size,
-            'robot_names': ['barrett', 'allegro', 'shadowhand'],
+            'robot_names': ['barrett', 'allegro', 'shadow'],
             'debug_object_names': None,
             'object_pc_type': 'random' if ckpt_name != 'model_3robots_partial' else 'partial',
             'num_workers': 16
@@ -58,6 +60,7 @@ def main():
     for i, data in enumerate(dataloader):
         robot_name = data['robot_name']
         object_name = data['object_name']
+        print(robot_name, object_name)
 
         if robot_name != global_robot_name:
             if global_robot_name is not None:
@@ -103,29 +106,34 @@ def main():
             predict_q_list.append(predict_q)
 
         predict_q_batch = torch.cat(predict_q_list, dim=0)
+        print("predict_q_batch.shape: ", predict_q_batch.shape)
 
-        success, isaac_q = validate_isaac(robot_name, object_name, predict_q_batch, gpu=gpu)
-        succ_num = success.sum().item() if success is not None else -1
-        success_q = predict_q_batch[success]
-        all_success_q.append(success_q)
 
-        cprint(f"[{robot_name}/{object_name}]", 'light_blue', end=' ')
-        cprint(f"Result: {succ_num}/{batch_size}({succ_num / batch_size * 100:.2f}%)", 'green')
-        success_num += succ_num
-        total_num += batch_size
-
-    all_success_q = torch.cat(all_success_q, dim=0)
-    diversity_std = torch.std(all_success_q, dim=0).mean()
-
-    times = np.array(time_list)
-    time_mean = np.mean(times)
-    time_std = np.std(times)
-
-    success_rate = success_num / total_num * 100
-    cprint(f"[{global_robot_name}]", 'magenta', end=' ')
-    cprint(f"Result: {success_num}/{total_num}({success_rate:.2f}%)", 'yellow', end=' ')
-    cprint(f"Std: {diversity_std:.3f}", 'cyan', end=' ')
-    cprint(f"Time: (mean) {time_mean:.2f} s, (std) {time_std:.2f} s", 'blue')
+    #
+    #
+    #
+    #     success, isaac_q = validate_isaac(robot_name, object_name, predict_q_batch, gpu=gpu)
+    #     succ_num = success.sum().item() if success is not None else -1
+    #     success_q = predict_q_batch[success]
+    #     all_success_q.append(success_q)
+    #
+    #     cprint(f"[{robot_name}/{object_name}]", 'light_blue', end=' ')
+    #     cprint(f"Result: {succ_num}/{batch_size}({succ_num / batch_size * 100:.2f}%)", 'green')
+    #     success_num += succ_num
+    #     total_num += batch_size
+    #
+    # all_success_q = torch.cat(all_success_q, dim=0)
+    # diversity_std = torch.std(all_success_q, dim=0).mean()
+    #
+    # times = np.array(time_list)
+    # time_mean = np.mean(times)
+    # time_std = np.std(times)
+    #
+    # success_rate = success_num / total_num * 100
+    # cprint(f"[{global_robot_name}]", 'magenta', end=' ')
+    # cprint(f"Result: {success_num}/{total_num}({success_rate:.2f}%)", 'yellow', end=' ')
+    # cprint(f"Std: {diversity_std:.3f}", 'cyan', end=' ')
+    # cprint(f"Time: (mean) {time_mean:.2f} s, (std) {time_std:.2f} s", 'blue')
 
 
 if __name__ == "__main__":
